@@ -1,0 +1,95 @@
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; }
+</style>
+
+<script type="module">
+import {getProg} from './proc.js';
+import {ctx as audioCtx, getPCM, playPCM}  from './audio.js';
+import {canvas, plotFourier} from './graphics.js';
+let {sin, cos, PI, sqrt, log, floor} = Math;
+
+document.body.appendChild(canvas);
+(window.onresize = function () {
+	canvas.width  = window.innerWidth;
+	canvas.height = window.innerHeight;
+})();
+let p_resume = Promise.resolve();
+let animating = true;
+window.onclick = function () {
+	animating = !animating;
+	if (animating)  return;
+	p_resume = new Promise(fulfill => {
+		window.addEventListener('click', fulfill);
+	})
+}
+
+window.onload = async function () {
+	let sampleRate = audioCtx.sampleRate;
+	let prog = await getProg(/*sampleRate*/ sampleRate);
+	let {alloc_f32, lowPass, fourier} = prog;
+	console.log(window.prog = prog);
+
+
+	let pcm = (await _getPCM()).subarray(0, 26000);
+	//for (let i = 0; i < pcm.length; i++)  pcm[i] = sin(2*PI*freq_rand*i/sampleRate);
+	playPCM(pcm);
+	let component = alloc_f32(pcm.length);
+	let bandwidth = 1.01; let gain = 20;
+	let spectrum  = new Array(260); // spectrum[time][freq];
+	for (let i = 0; i < 260; i++)  spectrum[i]  = new Float32Array(log(1000) / log(bandwidth));
+	for (let i = 0, freq = 20; freq < 20000; i++, freq *= bandwidth) {
+		fourier(component, pcm, freq, 12);
+		for (let dt = 0; dt < 260; dt++) {
+			spectrum[dt][i] = gain * component[floor(component.length*dt/260)];
+		}
+	}
+	//console.log(spectrum);
+	while (true) {
+		for (let dt = 0; dt < 260; dt++) {
+			plotFourier(spectrum[dt]);
+			window.stats = {
+				spectrum: spectrum[dt],
+				analyze () {
+					let peaks = analyze(spectrum[dt]);
+					console.log('Peaks:\n' + peaks.map(i => `${i}: ${20 * bandwidth**i}: ${spectrum[dt][i]}`).slice(0, 10).join('\n'));
+				},
+				play () {
+					let peaks = analyze(spectrum[dt]);
+					// this needs to be done via WebAudioAPI...
+					// -----> todo <-----
+				},
+			};
+			await new Promise(fulfill => setTimeout(fulfill, 1000*1 / 26));
+			await p_resume;
+		}
+		await new Promise(fulfill => setTimeout(fulfill, 2000));
+	}
+
+	function analyze (spectrum) {
+		let arr = new Array(spectrum.length).fill(0).map((_, i) => i);
+		let peaks = [ ];
+		for (let i = 0; i < 12; i++) {
+			let peak = sortBy(arr.slice(), i => i && spectrum[i]).reverse()[0];
+			for (let j = peak; spectrum[j+1] < spectrum[j]; j++)  arr[j] = null;
+			for (let j = peak; spectrum[j-1] < spectrum[j]; j--)  arr[j] = null;
+			peaks.push(peak);
+		}
+		return peaks;
+	}
+}
+
+function rela_view (arr, from, to) {
+	return arr.subarray(from*arr.length, to*arr.length);
+}
+
+async function _getPCM () {
+	let raw = await getPCM('data/input.mp3');
+	let pcm = window.prog.alloc_f32(raw.length);
+	for (let i = 0; i < pcm.length; i++) pcm[i] = raw[i];
+	return pcm;
+}
+
+function sortBy (arr, f) {
+	return arr.sort((a, b) => f(a) < f(b) ? -1 : 1);
+}
+</script>
