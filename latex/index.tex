@@ -1,0 +1,41 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{parskip}
+\usepackage{setspace}
+
+
+\begin{document}
+\spacing{1.5}
+
+\begin{center}
+{\Large Notes on Audio Processing} \\
+{\large As of \today} \\
+\end{center}
+
+\begin{minipage}{0.5\textwidth}
+\textit{signal} \dotfill $\mathbb{R} \to \mathbb{C}$  \\
+$i^2 = -1$  \\
+\end{minipage}
+
+\(
+	\text{correlate}\left(  a,\ b \right)_t = a_t \cdot \overline{b_t}
+\)
+
+\(
+	\text{fourier}\left( \text{out}\ \textit{(signal)},\ \text{in}\ \textit{(signal)},\ \text{frequency} \in \mathbb{R},\ \text{bandwidth} \in \mathbb{R} \right)\ \{  \\
+	{}\qquad \text{Let}\ a = \text{in}  \\
+	{}\qquad \text{Let}\ b_t = e^{i \cdot \omega \cdot t}  \qquad\text{with}\ \omega =  2 \pi \cdot\text{frequency}  \qquad\forall~t \in \text{range}  \\
+	{}\qquad \text{out} \leftarrow \text{correlate}(a, b)  \\
+	{}\qquad \text{out} \leftarrow \text{lowPass} (\text{out}, \text{bandwidth})  \\
+	{}\qquad \text{out} \leftarrow \text{lowPass'}(\text{out}, \text{bandwidth})  \\
+	\}
+\)
+
+The beauty of that definition lies within its simplicity: \\
+It only consists of building blocks that are simple to implement and cheap in run-time cost. \\
+The `lowPass' and `correlate' procedures need only make a single pass over the signal data, thus run in $\mathcal{O}(n)$ time.  \\
+$e^{i \cdot \omega \cdot t}$ too can be implemented to run very quickly.  \\
+
+\end{document}

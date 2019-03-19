@@ -6,8 +6,7 @@
  * https://en.wikipedia.org/wiki/Low-pass_filter#RC_filter
  **/
 
-__attribute__((used)) extern "C"
-void lowPass (float *buffer, int length, float cut_freq) {
+void lowPass_real (float *buffer, int length, float cut_freq) {
 	float tau = 1 / (cut_freq * 2 * 3.141592653589793);
 	float dt  = 1.0 / ctx.sampleRate;
 	float alpha = dt / (tau + dt);
@@ -18,6 +17,7 @@ void lowPass (float *buffer, int length, float cut_freq) {
 	}
 }
 
+__attribute__((used)) extern "C"
 void lowPass (cpx_t *buffer, int length, float cut_freq) {
 	float tau = 1 / (cut_freq * 2 * 3.141592653589793);
 	float dt  = 1.0 / ctx.sampleRate;
@@ -31,3 +31,17 @@ void lowPass (cpx_t *buffer, int length, float cut_freq) {
 	}
 }
 
+// time-reversed (operates from right to left)
+__attribute__((used)) extern "C"
+void lowPass_(cpx_t *buffer, int length, float cut_freq) {
+	float tau = 1 / (cut_freq * 2 * 3.141592653589793);
+	float dt  = 1.0 / ctx.sampleRate;
+	float alpha = dt / (tau + dt);
+
+	buffer[length-1].real = buffer[length-1].real;
+	buffer[length-1].imag = buffer[length-1].imag;
+	for (int i = length-2; i >= 0; i--) {
+		buffer[i].real = alpha * buffer[i].real + (1-alpha) * buffer[i+1].real;
+		buffer[i].imag = alpha * buffer[i].imag + (1-alpha) * buffer[i+1].imag;
+	}
+}

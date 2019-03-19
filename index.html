@@ -2,67 +2,118 @@
 html, body { margin: 0; padding: 0; overflow: hidden; }
 </style>
 
+<input type="range" id="range" min="0" max="100"><br><br>
+
 <script type="module">
-import {getProg} from './proc.js';
-import {ctx as audioCtx, getPCM, playPCM}  from './audio.js';
-import {canvas, plotFourier} from './graphics.js';
+import {getProg} from './proc.js';                                               // low-level program for efficient processing
+import {ctx as audioCtx, loadPCM, playPCM, playFrequencies}  from './audio.js';  // deals with audio I/O
+import {canvas, plotFourier} from './graphics.js';                               // deals with video I/O
 let {sin, cos, PI, sqrt, log, floor} = Math;
+import {timeout, event, resumed, animationFrame} from './utils.js';  // utility functions
 
 document.body.appendChild(canvas);
 (window.onresize = function () {
 	canvas.width  = window.innerWidth;
 	canvas.height = window.innerHeight;
 })();
-let p_resume = Promise.resolve();
-let animating = true;
-window.onclick = function () {
-	animating = !animating;
-	if (animating)  return;
-	p_resume = new Promise(fulfill => {
-		window.addEventListener('click', fulfill);
-	})
-}
+
+
 
 window.onload = async function () {
 	let sampleRate = audioCtx.sampleRate;
-	let prog = await getProg(/*sampleRate*/ sampleRate);
-	let {alloc_f32, lowPass, fourier} = prog;
+	let prog = await getProg(/*init_args...*/ sampleRate);
+	let {alloc_f32, lowPass, fourier, fourierExtract} = prog;
 	console.log(window.prog = prog);
+	await event(window, 'click');
+	await event(window, 'click');
 
 
-	let pcm = (await _getPCM()).subarray(0, 26000);
-	//for (let i = 0; i < pcm.length; i++)  pcm[i] = sin(2*PI*freq_rand*i/sampleRate);
-	playPCM(pcm);
-	let component = alloc_f32(pcm.length);
-	let bandwidth = 1.01; let gain = 20;
-	let spectrum  = new Array(260); // spectrum[time][freq];
-	for (let i = 0; i < 260; i++)  spectrum[i]  = new Float32Array(log(1000) / log(bandwidth));
-	for (let i = 0, freq = 20; freq < 20000; i++, freq *= bandwidth) {
-		fourier(component, pcm, freq, 12);
-		for (let dt = 0; dt < 260; dt++) {
-			spectrum[dt][i] = gain * component[floor(component.length*dt/260)];
+	let pcm = (await _getPCM()).subarray(48000, 54000);
+	pcm[0] = 0;
+	let tmp = alloc_f32(pcm.length);
+let freq_rand = Math.random()*400 + 200;  // freq_rand in [200; 600)
+console.log(`Chosen freq. is: ${freq_rand}`); await timeout(1500);
+for (let i = 0; i < pcm.length; i++)  pcm[i] = sin(2*PI*freq_rand*i/sampleRate);  // generate sin wave
+	await playPCM(pcm);
+//let freq_peak = getPeak(pcm)[0];
+//fourierExtract(component, pcm, freq_rand, 24);
+	//await timeout(300);
+	//await playPCM(pcm);
+//console.log('Done extraction.', freq_rand, freq_peak);
+	/*fourierExtract(component, pcm, freq_rand, 12);
+	await playPCM(pcm);
+	fourierExtract(component, pcm, freq_rand, 12);
+	await playPCM(pcm);
+	fourierExtract(component, pcm, freq_rand, 12);
+	await playPCM(pcm);
+	fourierExtract(component, pcm, freq_rand, 12);
+	await playPCM(pcm);
+	fourierExtract(component, pcm, freq_rand, 12);
+	await playPCM(pcm);*/
+
+
+	let bandwidth = 1.01;
+	let num_t_steps = floor(pcm.length/sampleRate * 48000);  // 60 samples per second
+	let num_f_steps = floor(log(1000) / log(bandwidth));
+	let spectrum  = new Array(num_t_steps); // spectrum[time][freq];  // a.k.a. spectrum[i_t][i_f]
+	for (let i_t = 0; i_t < num_t_steps; i_t++)  spectrum[i_t]  = new Float32Array(num_f_steps);
+	for (let i_f = 0; i_f < num_f_steps; i_f++) {
+		let freq = 20 * bandwidth**i_f;
+		console.log('Freq.:', freq);
+		fourier(pcm, tmp, freq, 12);
+		for (let i_t = 0; i_t < num_t_steps; i_t++) {
+			let gain = 5;
+			spectrum[i_t][i_f] = gain * tmp[floor(pcm.length / num_t_steps * i_t)];
 		}
+		await timeout(0);
 	}
+
+	/*function getPeak (pcm) {
+		let [freq_low, freq_high] = [40, 10000];
+		let component = alloc_f32(pcm.length);
+		function getComponentMean (freq) {
+			fourier(component, pcm, freq, 12);
+			return component[floor(component.length/2)];
+		}
+		for (let i = 0; i < 15; i++) {
+			let means = [getComponentMean(freq_low), getComponentMean(freq_high)];
+			console.log('Components:', means);
+			if (means[1] > means[0]) {
+				freq_low = (freq_high + freq_low) / 2;
+			} else {
+				freq_high = (freq_high + freq_low) / 2;
+			}
+		}
+		return [freq_low, freq_high];
+	}*/
+	//console.log('Peak:', getPeak(pcm), '\nActual:', freq_rand);
+
 	//console.log(spectrum);
 	while (true) {
-		for (let dt = 0; dt < 260; dt++) {
-			plotFourier(spectrum[dt]);
+		for (let i_t = 0; i_t < num_t_steps; i_t++) {
+			console.log('Plotting...');
+			document.querySelector('#range').value = pcm[i_t]*50 +50;
+			plotFourier(spectrum[i_t]);
 			window.stats = {
-				spectrum: spectrum[dt],
+				spectrum: spectrum[i_t],
 				analyze () {
-					let peaks = analyze(spectrum[dt]);
-					console.log('Peaks:\n' + peaks.map(i => `${i}: ${20 * bandwidth**i}: ${spectrum[dt][i]}`).slice(0, 10).join('\n'));
+					let peaks = analyze(spectrum[i_t]);
+					console.log('Peaks:\n' + peaks.map(i => `${i}: ${20 * bandwidth**i}: ${spectrum[i_t][i]}`).slice(0, 10).join('\n'));
 				},
-				play () {
-					let peaks = analyze(spectrum[dt]);
-					// this needs to be done via WebAudioAPI...
-					// -----> todo <-----
+				play (howManyPeaks = 10) {  // maybe let's play only the top 5 peaks... see what it does
+					let peaks = analyze(spectrum[i_t]);
+					let freqs = { };
+					for (let i of peaks.slice(0, howManyPeaks)) {
+						freqs[20 * bandwidth**i] = spectrum[i_t][i] * 0.1;
+					}
+					playFrequencies(freqs, 4000);
 				},
 			};
-			await new Promise(fulfill => setTimeout(fulfill, 1000*1 / 26));
-			await p_resume;
+			await animationFrame();
+			//await timeout(1000 / 5);
+			await resumed();
 		}
-		await new Promise(fulfill => setTimeout(fulfill, 2000));
+		await timeout(2000);
 	}
 
 	function analyze (spectrum) {
@@ -78,12 +129,8 @@ window.onload = async function () {
 	}
 }
 
-function rela_view (arr, from, to) {
-	return arr.subarray(from*arr.length, to*arr.length);
-}
-
 async function _getPCM () {
-	let raw = await getPCM('data/input.mp3');
+	let raw = await loadPCM('data/recording_aaa.wav');
 	let pcm = window.prog.alloc_f32(raw.length);
 	for (let i = 0; i < pcm.length; i++) pcm[i] = raw[i];
 	return pcm;
@@ -92,4 +139,5 @@ async function _getPCM () {
 function sortBy (arr, f) {
 	return arr.sort((a, b) => f(a) < f(b) ? -1 : 1);
 }
+
 </script>

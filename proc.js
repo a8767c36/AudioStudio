@@ -29,10 +29,15 @@ async function getProg (...init_args) {
 			if (inout_buf.buffer != memory.buffer) throw new Error(       'buffer is not valid!');
 			wasm.lowPass(inout_buf.byteOffset, inout_buf.length, cut_freq);
 		},
-		fourier (out_buf, in_buf, freq, bandwidth) {
+		fourier (in_buf, out_buf, freq, bandwidth) {
 			if (  out_buf.buffer != memory.buffer) throw new Error('output buffer is not valid!');
 			if (   in_buf.buffer != memory.buffer) throw new Error( 'input buffer is not valid!');
 			wasm.fourier(in_buf.byteOffset, out_buf.byteOffset, in_buf.length, freq, bandwidth);
+		},
+		fourierExtract (in_buf, out_buf, freq, bandwidth) {
+			if (  out_buf.buffer != memory.buffer) throw new Error('output buffer is not valid!');
+			if (   in_buf.buffer != memory.buffer) throw new Error( 'input buffer is not valid!');
+			wasm.fourierExtract(in_buf.byteOffset, out_buf.byteOffset, in_buf.length, freq, bandwidth);
 		},
 	};
 }

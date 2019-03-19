@@ -2,23 +2,18 @@
 #define sampleRate ctx.sampleRate
 
 
-
-__attribute((used)) extern "C"
-void fourier (real_t *in, real_t *out, size_t length, real_t freq, real_t bandwidth) {
-	if (tmp_buffer_length < sizeof(cpx_t) * length)  _throw("tmp_buffer too small!");
-	cpx_t *tmp = (cpx_t*)tmp_buffer;
-
+/*
+ * For the formulas, please refer to `/latex/index.pdf'.
+ * It should be noted though that the below implementation
+ * doesn't adhere strictly to the somewhat abstract definition given there.
+ */
+__attribute__((used)) extern "C"
+void fourier (cpx_t *out, const cpx_t *in, int length, float freq, float bandwidth) {
+	float omega = 2 * PI * freq / sampleRate;
 	for (int i = 0; i < length; i++) {
-		// out[i] = in[i] * exp(j*omega*t);
-		tmp[i].real = in[i] * sin(2*PI*freq * i/sampleRate);
-		tmp[i].imag = in[i] * cos(2*PI*freq * i/sampleRate);
+		cpx_mul_to(out[i], in[i], cpx_exp(omega * float(-i)));
 	}
-
-	lowPass(tmp, length, bandwidth);
-
-	for (int i = 0; i < length; i++) {
-		out[i] = cpx_abs(tmp[i]);
-	}
+	lowPass (out, length, bandwidth);
+	lowPass_(out, length, bandwidth);
 }
-
 
